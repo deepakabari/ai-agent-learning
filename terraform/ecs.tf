@@ -66,6 +66,12 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "PORT", value = "3001" },
         { name = "AWS_REGION", value = "us-east-1" }
       ]
+      secrets = [
+        {
+          name      = "GOOGLE_API_KEY"
+          valueFrom = aws_ssm_parameter.google_api_key.arn
+        }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
