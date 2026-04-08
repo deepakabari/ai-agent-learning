@@ -43,7 +43,9 @@ RUN echo 'server { \
         try_files $uri $uri/ /index.html; \
     } \
     location /api { \
-        proxy_pass http://backend:3001; \
+        resolver 169.254.169.253 valid=30s; \
+        set $upstream http://backend.ai-agent.local:3001; \
+        proxy_pass $upstream; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \
