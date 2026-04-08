@@ -1,0 +1,208 @@
+# =============================================================
+# AI Agent — CI/CD Pipeline
+# Build → Push to ECR → Deploy to ECS Fargate
+# =============================================================
+#
+# Prerequisites:
+#   1. AWS OIDC Identity Provider configured for GitHub Actions
+#   2. IAM Role with ECR + ECS permissions
+#   3. ECR repositories: ai-agent-backend, ai-agent-frontend
+#   4. GitHub Secrets: AWS_ACCOUNT_ID, AWS_ROLE_ARN, GOOGLE_API_KEY
+# =============================================================
+
+name: Deploy AI Agent
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Prevent overlapping deployments
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  BACKEND_ECR_REPO: ai-agent-backend
+  FRONTEND_ECR_REPO: ai-agent-frontend
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Lint & Test
+  # ─────────────────────────────────────────────
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service: [backend, frontend]
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Run tests
+        run: npm test --if-present
+        env:
+          NODE_ENV: test
+          GOOGLE_API_KEY: test-key-for-ci
+
+  # ─────────────────────────────────────────────
+  # Job 2: Build & Push Docker Images to ECR
+  # ─────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            ecr_repo_env: BACKEND_ECR_REPO
+            dockerfile: backend/Dockerfile
+            context: backend
+          - service: frontend
+            ecr_repo_env: FRONTEND_ECR_REPO
+            dockerfile: frontend/Dockerfile
+            context: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "image_tag_latest=latest" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+        run: |
+          docker build \
+            --target production \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -f ${{ matrix.dockerfile }} \
+            ${{ matrix.context }}
+
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Output image URI
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+        run: |
+          echo "### 🐳 Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|:---------|:------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | ${{ matrix.service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ─────────────────────────────────────────────
+  # Job 3: Deploy to ECS Fargate
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy summary
+        run: |
+          echo "### 🚀 Deployment Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|:---------|:------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | ${{ env.AWS_REGION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Actor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Note:** ECS task definition update and service deployment" >> $GITHUB_STEP_SUMMARY
+          echo "> will be configured once the ECS cluster and services are provisioned." >> $GITHUB_STEP_SUMMARY
+          echo "> For now, images are pushed to ECR and ready for manual deployment." >> $GITHUB_STEP_SUMMARY
+
+      # ──────────────────────────────────────────
+      # TODO: Uncomment once ECS cluster is set up
+      # ──────────────────────────────────────────
+      #
+      # - name: Download backend task definition
+      #   run: |
+      #     aws ecs describe-task-definition \
+      #       --task-definition ai-agent-backend \
+      #       --query taskDefinition \
+      #       > backend-task-def.json
+      #
+      # - name: Update backend image in task definition
+      #   id: render-backend
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition: backend-task-def.json
+      #     container-name: ai-agent-backend
+      #     image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
+      #
+      # - name: Deploy backend to ECS
+      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      #   with:
+      #     task-definition: ${{ steps.render-backend.outputs.task-definition }}
+      #     service: ai-agent-backend-service
+      #     cluster: ai-agent-cluster
+      #     wait-for-service-stability: true
