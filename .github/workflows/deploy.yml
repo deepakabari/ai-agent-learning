@@ -81,6 +81,7 @@ jobs:
     name: Build & Push (${{ matrix.service }})
     runs-on: ubuntu-latest
     needs: lint-and-test
+    environment: development
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
     strategy:
@@ -98,6 +99,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Verify secrets are present
+        run: |
+          if [ -z "${{ secrets.AWS_ROLE_ARN }}" ]; then
+            echo "❌ AWS_ROLE_ARN is missing in this context!"
+            exit 1
+          else
+            echo "✅ AWS_ROLE_ARN is configured."
+          fi
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -179,30 +189,5 @@ jobs:
           echo "> **Note:** ECS task definition update and service deployment" >> $GITHUB_STEP_SUMMARY
           echo "> will be configured once the ECS cluster and services are provisioned." >> $GITHUB_STEP_SUMMARY
           echo "> For now, images are pushed to ECR and ready for manual deployment." >> $GITHUB_STEP_SUMMARY
-
-      # ──────────────────────────────────────────
-      # TODO: Uncomment once ECS cluster is set up
-      # ──────────────────────────────────────────
-      #
-      # - name: Download backend task definition
-      #   run: |
-      #     aws ecs describe-task-definition \
-      #       --task-definition ai-agent-backend \
-      #       --query taskDefinition \
-      #       > backend-task-def.json
-      #
-      # - name: Update backend image in task definition
-      #   id: render-backend
-      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
-      #   with:
-      #     task-definition: backend-task-def.json
-      #     container-name: ai-agent-backend
-      #     image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
-      #
-      # - name: Deploy backend to ECS
-      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-      #   with:
-      #     task-definition: ${{ steps.render-backend.outputs.task-definition }}
-      #     service: ai-agent-backend-service
-      #     cluster: ai-agent-cluster
-      #     wait-for-service-stability: true
+          echo "> For now, images are pushed to ECR and ready for manual deployment." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
