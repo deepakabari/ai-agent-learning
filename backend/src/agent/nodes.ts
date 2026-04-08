@@ -50,9 +50,16 @@ You can help users with ANY coding project by using your tools:
  */
 export function createCodingLLM(config: EnvConfig) {
   // --- Option 1: Groq (Llama 3.3 via OpenAI SDK) ---
+  if (!config.GROQ_API_KEY) {
+    throw new Error(
+      "Missing GROQ_API_KEY. Please add it to your .env file to use the Groq provider."
+    );
+  }
+
   const llm = new ChatOpenAI({
     modelName: config.GROQ_MODEL,
     apiKey: config.GROQ_API_KEY,
+    openAIApiKey: config.GROQ_API_KEY, // Support for different library versions
     configuration: {
       baseURL: "https://api.groq.com/openai/v1",
     },

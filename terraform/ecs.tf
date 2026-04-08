@@ -77,6 +77,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name      = "GOOGLE_API_KEY"
           valueFrom = aws_ssm_parameter.google_api_key.arn
+        },
+        {
+          name      = "GROQ_API_KEY"
+          valueFrom = aws_ssm_parameter.groq_api_key.arn
         }
       ]
       logConfiguration = {
