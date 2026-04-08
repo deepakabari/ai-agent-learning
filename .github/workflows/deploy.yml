@@ -119,51 +119,48 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Extract metadata
-        id: meta
-        run: |
-          echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-          echo "image_tag_latest=latest" >> $GITHUB_OUTPUT
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}
-          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
-        run: |
-          docker build \
-            --target production \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            -f ${{ matrix.dockerfile }} \
-            ${{ matrix.context }}
-
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: production
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Output image URI
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}
-          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
         run: |
           echo "### 🐳 Docker Image Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|:---------|:------|" >> $GITHUB_STEP_SUMMARY
           echo "| Service | ${{ matrix.service }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
 
   # ─────────────────────────────────────────────
-  # Job 3: Deploy to ECS Fargate
+  # Job 3: Deploy to ECS Fargate (Parallelized)
   # ─────────────────────────────────────────────
   deploy:
-    name: Deploy to ECS
+    name: Deploy to ECS (${{ matrix.service }})
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     environment: production
+
+    strategy:
+      matrix:
+        service: [backend, frontend]
 
     steps:
       - name: Checkout code
@@ -175,62 +172,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy summary
-        run: |
-          echo "### 🚀 Deployment Triggered" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|:---------|:------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
-          echo "| Region | ${{ env.AWS_REGION }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Actor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> For now, images are pushed to ECR and the ECS services are being updated." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-      - name: Download backend task definition
+      - name: Download task definition
         run: |
           aws ecs describe-task-definition \
-            --task-definition ai-agent-backend \
+            --task-definition ai-agent-${{ matrix.service }} \
             --query taskDefinition \
-            > backend-task-def.json
+            > task-def.json
 
-      - name: Update backend image in task definition
-        id: render-backend
+      - name: Update image in task definition
+        id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: backend-task-def.json
-          container-name: ai-agent-backend
-          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.BACKEND_ECR_REPO }}:${{ github.sha }}
+          task-definition: task-def.json
+          container-name: ai-agent-${{ matrix.service }}
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.service == 'backend' && env.BACKEND_ECR_REPO || env.FRONTEND_ECR_REPO }}:${{ github.sha }}
 
-      - name: Deploy backend to ECS
+      - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.render-backend.outputs.task-definition }}
-          service: ai-agent-backend-service
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ai-agent-${{ matrix.service }}-service
           cluster: ai-agent-cluster
           wait-for-service-stability: true
 
-      - name: Download frontend task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ai-agent-frontend \
-            --query taskDefinition \
-            > frontend-task-def.json
-
-      - name: Update frontend image in task definition
-        id: render-frontend
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: frontend-task-def.json
-          container-name: ai-agent-frontend
-          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
-
-      - name: Deploy frontend to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
-          service: ai-agent-frontend-service
-          cluster: ai-agent-cluster
-          wait-for-service-stability: true
