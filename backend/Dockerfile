@@ -50,4 +50,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD node -e "fetch('http://localhost:3001/healthz').then(r => process.exit(r.ok ? 0 : 1))"
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]
