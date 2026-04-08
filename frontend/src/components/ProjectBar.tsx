@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { scanProject, type ProjectInfo } from "../hooks/useAgent";
 
 /**
@@ -14,11 +14,16 @@ export function ProjectBar({
   projectPath: string;
   onProjectPathChange: (path: string) => void;
   projectInfo: ProjectInfo | null;
-  onProjectLoaded: (info: ProjectInfo) => void;
+  onProjectLoaded: (info: ProjectInfo | null) => void;
 }) {
   const [inputPath, setInputPath] = useState(projectPath);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep input in sync with external path (e.g., from auto-load)
+  useEffect(() => {
+    setInputPath(projectPath);
+  }, [projectPath]);
 
   const handleLoad = useCallback(async () => {
     const trimmed = inputPath.trim();
@@ -38,6 +43,13 @@ export function ProjectBar({
     }
   }, [inputPath, onProjectPathChange, onProjectLoaded]);
 
+  const handleClear = useCallback(() => {
+    setInputPath("");
+    onProjectPathChange("");
+    onProjectLoaded(null);
+    setError(null);
+  }, [onProjectPathChange, onProjectLoaded]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") {
@@ -48,10 +60,14 @@ export function ProjectBar({
     [handleLoad]
   );
 
+  const isGithub = inputPath.toLowerCase().includes("github.com");
+
   return (
     <div className="project-bar">
       <div className="project-input-row">
-        <div className="project-icon">📂</div>
+        <div className="project-icon" title="Project Path or GitHub URL">
+          {isGithub ? "🌐" : "📂"}
+        </div>
         <input
           id="project-path-input"
           type="text"
@@ -59,9 +75,21 @@ export function ProjectBar({
           value={inputPath}
           onChange={(e) => setInputPath(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter project path (e.g., D:\my-app)"
+          placeholder="Path (D:\app) or GitHub URL (https://...)"
           disabled={isScanning}
         />
+        
+        {projectPath && (
+          <button
+            className="project-clear-btn"
+            onClick={handleClear}
+            title="Clear project"
+            disabled={isScanning}
+          >
+            ✕
+          </button>
+        )}
+
         <button
           id="load-project-btn"
           className="project-load-btn"

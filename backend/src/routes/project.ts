@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { scanProject } from "../agent/project-scanner.js";
+import { ensureLocalPath } from "../services/repo-manager.js";
 
 /**
  * Project routes — scan and inspect projects.
@@ -25,7 +26,8 @@ const projectRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const { projectPath } = request.body;
 
       try {
-        const info = await scanProject(projectPath);
+        const localPath = await ensureLocalPath(projectPath);
+        const info = await scanProject(localPath);
         return reply.send({
           name: info.name,
           techStack: info.techStack,

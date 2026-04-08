@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { invokeAgent } from "../agent/graph.js";
+import { ensureLocalPath } from "../services/repo-manager.js";
 
 /**
  * Agent routes — the primary API for the coding assistant.
@@ -47,9 +48,10 @@ const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       const { message, projectPath, sessionId } = request.body;
 
       try {
+        const localPath = projectPath ? await ensureLocalPath(projectPath) : undefined;
         const result = await invokeAgent({
           message,
-          projectPath,
+          projectPath: localPath,
           sessionId,
           config: app.config,
           logger: app.log,

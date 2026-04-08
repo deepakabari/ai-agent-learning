@@ -6,6 +6,7 @@ FROM node:24-alpine AS development
 WORKDIR /app
 
 COPY package*.json ./
+RUN apk add --no-cache git
 RUN npm ci
 
 COPY . .
@@ -38,6 +39,7 @@ RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
 
 COPY package*.json ./
+RUN apk add --no-cache git
 RUN npm ci --omit=dev && \
     npm cache clean --force
 

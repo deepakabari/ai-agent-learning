@@ -1,4 +1,11 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+/**
+ * API URL Configuration
+ * 
+ * In development (testing locally), this matches your backend.
+ * In production (deployed), we use an empty string so the browser 
+ * makes requests to the same host (relies on Nginx proxying).
+ */
+const API_URL = import.meta.env.VITE_API_URL || "";
 
 /** Project scan result. */
 export interface ProjectInfo {
