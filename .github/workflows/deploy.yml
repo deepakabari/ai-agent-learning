@@ -211,3 +211,26 @@ jobs:
           service: ai-agent-backend-service
           cluster: ai-agent-cluster
           wait-for-service-stability: true
+
+      - name: Download frontend task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-agent-frontend \
+            --query taskDefinition \
+            > frontend-task-def.json
+
+      - name: Update frontend image in task definition
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: frontend-task-def.json
+          container-name: ai-agent-frontend
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.FRONTEND_ECR_REPO }}:${{ github.sha }}
+
+      - name: Deploy frontend to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+          service: ai-agent-frontend-service
+          cluster: ai-agent-cluster
+          wait-for-service-stability: true
