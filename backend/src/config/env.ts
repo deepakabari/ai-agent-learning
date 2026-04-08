@@ -17,7 +17,7 @@ export const envSchema = {
       enum: ["development", "production", "test"],
     },
     GOOGLE_API_KEY: { type: "string" },
-    GEMINI_MODEL: { type: "string", default: "gemini-2.5-flash" },
+    GEMINI_MODEL: { type: "string", default: "gemini-1.5-flash" },
     AWS_REGION: { type: "string", default: "us-east-1" },
     DYNAMODB_TABLE_NAME: {
       type: "string",
