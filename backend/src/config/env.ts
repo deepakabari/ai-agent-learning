@@ -7,7 +7,7 @@ import type { FastifyInstance } from "fastify";
  */
 export const envSchema = {
   type: "object" as const,
-  required: ["GOOGLE_API_KEY"],
+  required: [], // Made optional to allow flexible provider switching
   properties: {
     PORT: { type: "number", default: 3001 },
     HOST: { type: "string", default: "0.0.0.0" },
@@ -16,8 +16,13 @@ export const envSchema = {
       default: "development",
       enum: ["development", "production", "test"],
     },
+    // Google Gemini
     GOOGLE_API_KEY: { type: "string" },
     GEMINI_MODEL: { type: "string", default: "gemini-3-pro-preview" },
+    // Groq / OpenAI-Compatible
+    GROQ_API_KEY: { type: "string" },
+    GROQ_MODEL: { type: "string", default: "llama-3.3-70b-versatile" },
+    // AWS
     AWS_REGION: { type: "string", default: "us-east-1" },
     DYNAMODB_TABLE_NAME: {
       type: "string",
@@ -33,8 +38,10 @@ export interface EnvConfig {
   PORT: number;
   HOST: string;
   NODE_ENV: "development" | "production" | "test";
-  GOOGLE_API_KEY: string;
+  GOOGLE_API_KEY?: string;
   GEMINI_MODEL: string;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL: string;
   AWS_REGION: string;
   DYNAMODB_TABLE_NAME: string;
   RATE_LIMIT_MAX: number;

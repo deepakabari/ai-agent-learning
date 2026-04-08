@@ -1,4 +1,5 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+// import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenAI } from "@langchain/openai";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import type { AgentStateType } from "./state.js";
 import type { EnvConfig } from "../config/env.js";
@@ -7,7 +8,7 @@ import { allCodeTools } from "../tools/code-tools.js";
 /**
  * Coding Assistant System Prompt
  *
- * This transforms Gemini into a senior full-stack developer
+ * This transforms the LLM into a senior full-stack developer
  * that can read, understand, and write code in any project.
  */
 const CODING_SYSTEM_PROMPT = `You are a **Senior Full-Stack Developer AI Assistant** with deep expertise in modern web technologies.
@@ -45,17 +46,30 @@ You can help users with ANY coding project by using your tools:
 
 /**
  * Creates the LLM with coding tools bound.
- * Gemini will automatically decide when to call tools.
+ * Supports Groq (Llama 3.3) or Google Gemini.
  */
 export function createCodingLLM(config: EnvConfig) {
+  // --- Option 1: Groq (Llama 3.3 via OpenAI SDK) ---
+  const llm = new ChatOpenAI({
+    modelName: config.GROQ_MODEL,
+    apiKey: config.GROQ_API_KEY,
+    configuration: {
+      baseURL: "https://api.groq.com/openai/v1",
+    },
+    temperature: 0.3,
+  });
+
+  // --- Option 2: Google Gemini (Commented out) ---
+  /*
   const llm = new ChatGoogleGenerativeAI({
     model: config.GEMINI_MODEL,
     apiKey: config.GOOGLE_API_KEY,
-    temperature: 0.3, // Lower temp for more precise code generation
+    temperature: 0.3,
     maxOutputTokens: 8192,
   });
+  */
 
-  // Bind all code tools so Gemini can call them
+  // Bind all code tools so the LLM can call them
   return llm.bindTools(allCodeTools);
 }
 
