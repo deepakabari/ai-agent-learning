@@ -7,6 +7,7 @@ import rateLimitPlugin from "./plugins/rate-limit.js";
 import healthRoutes from "./routes/health.js";
 import agentRoutes from "./routes/agent.js";
 import projectRoutes from "./routes/project.js";
+import mcpRoutes from "./routes/mcp.js";
 
 /**
  * Build and configure the Fastify application.
@@ -44,6 +45,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(healthRoutes, { prefix: "/api" }); // Public Health Checks (/api/healthz)
   await app.register(agentRoutes, { prefix: "/api" });
   await app.register(projectRoutes, { prefix: "/api" });
+  await app.register(mcpRoutes, { prefix: "/api" });
 
   // --- Global Error Handler ---
   app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {

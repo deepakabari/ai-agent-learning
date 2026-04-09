@@ -15,15 +15,20 @@ async function start(): Promise<void> {
   // --- Connect to MCP Servers ---
   try {
     await mcpManager.connectAll();
-    const tools = await mcpManager.discoverTools();
+    const { tools, resources, prompts } = await mcpManager.discoverAll();
     app.log.info(
-      { toolCount: tools.length },
-      "MCP tools discovered"
+      {
+        servers: mcpManager.getConnectedServers(),
+        toolCount: tools.length,
+        resourceCount: resources.length,
+        promptCount: prompts.length,
+      },
+      "MCP capabilities discovered"
     );
   } catch (error) {
     app.log.warn(
       error,
-      "MCP server connection failed — agent will run without tools"
+      "MCP server connection failed — agent will run without MCP capabilities"
     );
   }
 

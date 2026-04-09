@@ -31,10 +31,27 @@ function validatePath(projectPath: string, filePath: string): string {
   return resolved;
 }
 
+/**
+ * MCP Tool Annotations
+ *
+ * Metadata hints that tell clients about a tool's behavior:
+ *   - readOnlyHint: tool only reads data, no side effects
+ *   - destructiveHint: tool may delete or overwrite data
+ *   - idempotentHint: calling multiple times with same args has same effect
+ *   - openWorldHint: tool interacts with external/unbounded systems
+ */
+interface ToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 interface McpToolDef {
   name: string;
   description: string;
   schema: Record<string, z.ZodTypeAny>;
+  annotations: ToolAnnotations;
   handler: (args: Record<string, unknown>) => Promise<{
     content: Array<{ type: "text"; text: string }>;
   }>;
@@ -47,6 +64,12 @@ export const codeAssistantTools: McpToolDef[] = [
     schema: {
       filePath: z.string().describe("Relative path to the file"),
       projectPath: z.string().describe("Absolute project directory"),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
     handler: async (args) => {
       const safePath = validatePath(String(args["projectPath"]), String(args["filePath"]));
@@ -63,6 +86,12 @@ export const codeAssistantTools: McpToolDef[] = [
       content: z.string(),
       projectPath: z.string(),
     },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     handler: async (args) => {
       const safePath = validatePath(String(args["projectPath"]), String(args["filePath"]));
       await mkdir(resolve(safePath, ".."), { recursive: true });
@@ -78,6 +107,12 @@ export const codeAssistantTools: McpToolDef[] = [
       searchText: z.string(),
       replaceText: z.string(),
       projectPath: z.string(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
     },
     handler: async (args) => {
       const safePath = validatePath(String(args["projectPath"]), String(args["filePath"]));
@@ -96,6 +131,12 @@ export const codeAssistantTools: McpToolDef[] = [
     schema: {
       query: z.string(),
       projectPath: z.string(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
     },
     handler: async (args) => {
       const results: string[] = [];
@@ -137,6 +178,12 @@ export const codeAssistantTools: McpToolDef[] = [
       projectPath: z.string(),
       maxDepth: z.number().optional(),
     },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     handler: async (args) => {
       const lines: string[] = [];
       const dir = resolve(String(args["projectPath"]));
@@ -173,6 +220,12 @@ export const codeAssistantTools: McpToolDef[] = [
     schema: {
       command: z.string(),
       projectPath: z.string(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
     },
     handler: async (args) => {
       const command = String(args["command"]);
