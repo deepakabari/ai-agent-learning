@@ -67,12 +67,10 @@ export function createCodingLLM(config: EnvConfig) {
       break;
 
     case "ollama":
-      llm = new ChatOpenAI({
-        modelName: config.OLLAMA_MODEL,
-        apiKey: "ollama", // Placeholder text
-        configuration: {
-          baseURL: config.OLLAMA_BASE_URL,
-        },
+      const { ChatOllama } = await import("@langchain/ollama");
+      llm = new ChatOllama({
+        model: config.OLLAMA_MODEL,
+        baseUrl: config.OLLAMA_BASE_URL.replace("/v1", ""), // Native API uses host:port base
         temperature: 0.3,
       });
       break;

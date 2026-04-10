@@ -74,7 +74,7 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "AWS_REGION", value = "us-east-1" },
         { name = "LLM_PROVIDER", value = "ollama" },
         { name = "OLLAMA_MODEL", value = "llama3:latest" },
-        { name = "OLLAMA_BASE_URL", value = "http://192.168.0.94:11434/v1" }
+        { name = "OLLAMA_BASE_URL", value = "http://192.168.0.94:11434" }
       ]
       secrets = [
         {
